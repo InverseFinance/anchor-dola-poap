@@ -27,6 +27,19 @@ function setUnion(sets) {
 
     return _union;
 }
+async function filterBlockDates(events, deadline) {
+    // The `filter` method on arrays is not asynchronous. To get around this
+    // we do a two-step filter process by first running `map` to determine which
+    // values should be filtered out. Then we run the filter synchronously with
+    // those intermediate results.
+    const asyncFilter = async (array, predicate) => {
+        const results = await Promise.all(array.map(predicate));
+
+        return array.filter((_value, index) => results[index]);
+    }
+
+    return await asyncFilter(events, async (e) => (await e.getBlock()).timestamp <= deadline);
+}
 
 
 // We're only interested in the events related to Dola / Anchor usage.
@@ -56,11 +69,17 @@ const dolaCrvStakes = await rewardsDolaCrv.queryFilter(stakedDolaCrvFilter, olde
 const dolaBuys = await stabilizer.queryFilter(boughtDolaFilter, oldestBlock, "latest");
 const dolaSwaps = await uniswap.queryFilter(swapFilter, oldestBlock, 'latest');
 
-const ethSuppliers  = [...new Set(ethSupplies.map(event => event.args.minter))];
-const dolaEthStakers = [...new Set(dolaEthStakes.map(event => event.args.user))];
-const dolaCrvStakers = [...new Set(dolaCrvStakes.map(event => event.args.user))];
-const dolaBuyers = [...new Set(dolaBuys.map(event => event.args.user))];
-const dolaSwappers = [...new Set(dolaSwaps.map(event => event.args.sender))];
+// Get sets of unique addresses per event type
+const ethSuppliers  = new Set(ethSupplies.map(event => event.args.minter));
+const dolaBuyers = new Set(dolaBuys.map(event => event.args.user));
+const dolaSwappers = new Set(dolaSwaps.map(event => event.args.sender));
 
+// Staking rewards have an end date. We filter out staking events that occurred after that date
+const validDolaCrvStakeEvents = await filterBlockDates(dolaCrvStakes, Number(process.env.DOLA_CRV_STAKING_DEADLINE));
+const validDolaEthStakeEvents = await filterBlockDates(dolaEthStakes, Number(process.env.DOLA_ETH_STAKING_DEADLINE));
+const dolaCrvStakers = new Set(validDolaCrvStakeEvents.map(event => event.args.user));
+const dolaEthStakers = new Set(validDolaEthStakeEvents.map(event => event.args.user));
+
+// Combine sets and thus filter out duplicates
 const elligibleAddresses = setUnion([ethSuppliers, dolaEthStakers, dolaCrvStakers, dolaBuyers, dolaSwappers]);
 await exportCSV('rewards.csv', [...elligibleAddresses]);
