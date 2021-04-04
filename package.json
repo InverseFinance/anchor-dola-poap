@@ -1,0 +1,13 @@
+{
+  "name": "dola-users-poap",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "license": "MIT",
+  "dependencies": {
+    "csv-writer": "^1.6.0",
+    "dotenv": "^8.2.0",
+    "ethers": "^5.1.0",
+    "node-core-lib": "^0.11.11"
+  }
+}
